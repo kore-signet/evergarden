@@ -1,0 +1,23 @@
+[general]
+max_hops = 0
+
+[http]
+timeout = "100s"
+
+[ratelimiter]
+max_tasks_per_worker = 16
+n = 60
+per = "second"
+jitter = "50ms"
+
+[scripts.scrape_html]
+filter = { mime_types = ["text/html"] }
+command = "python"
+args = ["scripts/scrape_html.py"] 
+workers = 1
+
+[scripts.links]
+filter = { mime_types = ["text/css"] }
+command = "python"
+args = ["scripts/scrape_links.py"] 
+workers = 1

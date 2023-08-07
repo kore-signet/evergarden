@@ -1,0 +1,36 @@
+[package]
+name = "evergarden-client"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+hyper = { version = "0.14.27", features = ["full"] }
+trust-dns-resolver = "0.22.0"
+hyper-trust-dns = "0.5.0"
+hyper-rustls = { version = "0.24.1", features = ["http2"] }
+governor = "0.6.0"
+
+tokio = { version = "1.29.1", features = ["full"] }
+
+url = { version = "2.4.0", features = ["serde"] }
+neo-mime = { version = "0.1.1", features = ["serde"] }
+
+flume = "0.10.14"
+async-broadcast = "0.5.1"
+
+time = { version = "0.3.23", features = ["formatting", "serde"] }
+bytes = "1.4.0"
+regex = "1.9.1"
+futures-util = "0.3.28"
+
+serde_regex = "1.1.0"
+serde = { version = "1.0.179", features = ["derive"] }
+serde_json = "1.0.104"
+toml = "0.7.6"
+humantime-serde = "1.1.1"
+
+
+evergarden-common = {path = "../common"}
+actors = { path = "../actors" }
+uuid = { version = "1.4.1", features = ["v4"] }
