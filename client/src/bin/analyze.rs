@@ -2,17 +2,14 @@ use std::error::Error;
 
 use evergarden_common::Storage;
 
-
- fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let storage = Storage::new("results.db", false)?;
 
     for res in storage.list() {
-        let (key, hash, val) = res?;
+        let (_key, hash, val) = res?;
 
         println!("--/ {} /--", hash);
         println!("{}", serde_json::to_string_pretty(&val.url)?);
-
-
     }
     // for res in storage.metadata.iter() {
     //     let (k, _) = res?;

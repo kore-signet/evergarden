@@ -107,7 +107,7 @@ pub struct ResponseMetadata {
     pub headers: HeaderMap<HeaderValue>,
     pub remote_addr: Option<SocketAddr>,
     pub fetched_at: OffsetDateTime,
-    pub id: Uuid
+    pub id: Uuid,
 }
 
 #[derive(Clone, Debug)]

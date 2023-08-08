@@ -7,7 +7,6 @@ use evergarden_common::{EvergardenResult, HttpResponse};
 use futures_util::TryStreamExt;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-
 #[derive(Debug)]
 pub enum ClientRequest {
     Submit {

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use actors::Actor;
 use bytes::BytesMut;
-use cacache::{WriteOpts, SyncReader};
-use futures_util::{TryStreamExt, Future, TryFutureExt};
+use cacache::{SyncReader, WriteOpts};
+use futures_util::{Future, TryFutureExt, TryStreamExt};
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
 
 use ssri::Integrity;
@@ -13,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::runtime::Handle;
 use url::Url;
 
-use crate::{surt, EvergardenResult, EvergardenError};
+use crate::{surt, EvergardenError, EvergardenResult};
 use crate::{BodyReadError, HttpResponse, ResponseMetadata};
 
 struct SyncBridge<T> {
@@ -148,43 +148,60 @@ impl Storage {
         }))
     }
 
-    pub fn read_body_sync(&self, hash: Integrity) -> EvergardenResult<Option<FrameDecoder<cacache::SyncReader>>> {
+    pub fn read_body_sync(
+        &self,
+        hash: Integrity,
+    ) -> EvergardenResult<Option<FrameDecoder<cacache::SyncReader>>> {
         if !cacache::exists_sync(&self.path, &hash) {
-            return Ok(None)
+            return Ok(None);
         }
 
-        Ok(Some(FrameDecoder::new(SyncReader::open_hash(&self.path, hash)?)))
+        Ok(Some(FrameDecoder::new(SyncReader::open_hash(
+            &self.path, hash,
+        )?)))
     }
 
-    pub fn list(&self) -> impl Iterator<Item = EvergardenResult<(String, Integrity, ResponseMetadata)>> + '_ {
-        cacache::list_sync(&self.path).map(|res| -> EvergardenResult<(String, Integrity, ResponseMetadata)> {
-            let res = match res {
-                Ok(v) => v,
-                Err(e) => return Err(EvergardenError::Cache(e)),
-            };
+    pub fn list(
+        &self,
+    ) -> impl Iterator<Item = EvergardenResult<(String, Integrity, ResponseMetadata)>> + '_ {
+        cacache::list_sync(&self.path).map(
+            |res| -> EvergardenResult<(String, Integrity, ResponseMetadata)> {
+                let res = match res {
+                    Ok(v) => v,
+                    Err(e) => return Err(EvergardenError::Cache(e)),
+                };
 
-            let headers: ResponseMetadata = serde_json::from_value(res.metadata)?;
-            
-            Ok((res.key, res.integrity, headers))
-        })
+                let headers: ResponseMetadata = serde_json::from_value(res.metadata)?;
+
+                Ok((res.key, res.integrity, headers))
+            },
+        )
     }
 
     async fn answer_request(&mut self, i: StorageMessage) -> EvergardenResult<StorageResponse> {
         match i {
-            StorageMessage::Retrieve(key) => self.retrieve_by_url(key).map_ok(|v| StorageResponse::Retrieve(v)).await,
-            StorageMessage::Store(res) => self.write_res(res).map_ok(|_| StorageResponse::Stored).await,
+            StorageMessage::Retrieve(key) => {
+                self.retrieve_by_url(key)
+                    .map_ok(|v| StorageResponse::Retrieve(v))
+                    .await
+            }
+            StorageMessage::Store(res) => {
+                self.write_res(res)
+                    .map_ok(|_| StorageResponse::Stored)
+                    .await
+            }
         }
     }
 }
 
 pub enum StorageMessage {
     Retrieve(Url),
-    Store(HttpResponse)
+    Store(HttpResponse),
 }
 
 pub enum StorageResponse {
     Retrieve(Option<HttpResponse>),
-    Stored
+    Stored,
 }
 
 impl Actor for Storage {

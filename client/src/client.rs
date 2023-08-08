@@ -176,7 +176,7 @@ impl HttpClient {
         let res = HttpResponse {
             meta: Arc::new(ResponseMetadata {
                 url,
-                id: Uuid::new_v4(), 
+                id: Uuid::new_v4(),
                 status: header.status,
                 version: header.version,
                 headers: header.headers,
@@ -186,7 +186,11 @@ impl HttpClient {
             body: body_rx,
         };
 
-        let (body, storage, scraper) = tokio::join!(body_task, self.storage.request(StorageMessage::Store(res.clone())), self.scrapers.request(res.clone()));
+        let (body, storage, scraper) = tokio::join!(
+            body_task,
+            self.storage.request(StorageMessage::Store(res.clone())),
+            self.scrapers.request(res.clone())
+        );
 
         body.unwrap()?;
         storage?;
@@ -250,8 +254,6 @@ impl Actor for HttpClient {
         futures_util::future::ready(())
     }
 }
-
-
 
 pub async fn broadcast_body(
     max_length: Option<usize>,

@@ -23,7 +23,10 @@ pub struct ScriptManager {
 }
 
 impl ScriptManager {
-    pub fn new(scripts: Vec<ScriptConfig>, global: &GlobalState) -> EvergardenResult<ScriptManager> {
+    pub fn new(
+        scripts: Vec<ScriptConfig>,
+        global: &GlobalState,
+    ) -> EvergardenResult<ScriptManager> {
         Ok(ScriptManager {
             scripts: scripts
                 .into_iter()
