@@ -21,6 +21,6 @@ sha2 = { version = "0.10.7", features = ["asm"] }
 faster-hex = "0.8.0"
 clap = { version = "4.3.19", features = ["derive"] }
 ubyte = "0.10.3"
-zip = "0.6.6"
+zip = { version = "0.6.6", default-features = false, features = ["deflate", "time", "sha1", "hmac", "pbkdf2"] }
 log = "0.4.19"
 pretty_env_logger = "0.5.0"

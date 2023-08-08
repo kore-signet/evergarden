@@ -19,7 +19,7 @@ use tokio::{
     sync::{watch, OwnedSemaphorePermit, Semaphore, SemaphorePermit},
     time::timeout,
 };
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{
@@ -151,8 +151,6 @@ impl HttpClient {
 
     #[tracing::instrument(skip(self))]
     pub async fn get(&self, url: UrlInfo) -> EvergardenResult<HttpResponse> {
-        info!("fetching {}", url.url.as_str());
-
         let mut request = Request::get(url.url.as_str());
         request
             .headers_mut()
@@ -175,7 +173,7 @@ impl HttpClient {
             }
         };
 
-        info!("reading body");
+        debug!("reading body");
 
         let (body_tx, body_rx) = async_broadcast::broadcast(1024);
         let body_task = tokio::task::spawn(broadcast_body(self.max_body_length, body, body_tx));

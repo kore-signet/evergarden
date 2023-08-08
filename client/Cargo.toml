@@ -25,7 +25,7 @@ regex = "1.9.1"
 futures-util = "0.3.28"
 
 serde_regex = "1.1.0"
-serde = { version = "1.0.179", features = ["derive"] }
+serde = { version = "1.0.179", features = ["derive", "rc"] }
 serde_json = "1.0.104"
 toml = "0.7.6"
 humantime-serde = "1.1.1"

@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     num::{NonZeroU32, NonZeroUsize},
+    sync::Arc,
     time::Duration,
 };
 
@@ -41,7 +42,7 @@ pub struct HeaderPair {
     pub value: String,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ScriptConfig {
     pub filter: ScriptFilter,
     pub command: String,
@@ -49,7 +50,7 @@ pub struct ScriptConfig {
     pub workers: usize,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ScriptFilter {
     #[serde(with = "serde_regex", default)]
     pub(crate) url_pattern: Option<Regex>,
@@ -131,5 +132,5 @@ pub struct FullConfig {
     pub general: GlobalConfig,
     pub ratelimiter: RateLimitingConfig,
     pub http: HttpConfig,
-    pub scripts: BTreeMap<String, ScriptConfig>,
+    pub scripts: BTreeMap<Arc<str>, ScriptConfig>,
 }

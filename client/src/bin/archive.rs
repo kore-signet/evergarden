@@ -1,7 +1,6 @@
 use std::{error::Error, path::PathBuf, sync::atomic::Ordering, time::Duration};
 
 use actors::ActorManager;
-use clap::builder::TypedValueParser;
 use clap::Parser;
 use evergarden_client::{
     client::{HttpClient, HttpRateLimiter},
@@ -63,10 +62,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         client: http_mailbox.clone(),
     };
 
-    script_runner.spawn_actor(ScriptManager::new(
-        scripts.into_values().collect(),
-        &global_state,
-    )?);
+    script_runner.spawn_actor(ScriptManager::new(scripts.into_iter(), &global_state)?);
 
     let mail = http_mailbox.clone();
     tokio::task::spawn(async move {

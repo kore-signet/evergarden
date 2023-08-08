@@ -1,4 +1,4 @@
-use std::{process::Stdio, time::Duration};
+use std::{fmt::Display, process::Stdio, sync::Arc, time::Duration};
 
 use actors::{Actor, ActorManager, Mailbox};
 
@@ -19,19 +19,30 @@ use crate::{
 
 use super::protocol::{ClientReader, ClientWriter};
 
+pub struct ScriptId {
+    pub name: Arc<str>,
+    pub counter: usize,
+}
+
+impl Display for ScriptId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[{:03}]", self.name, self.counter)
+    }
+}
+
 pub struct ScriptManager {
     scripts: Vec<Script>,
 }
 
 impl ScriptManager {
     pub fn new(
-        scripts: Vec<ScriptConfig>,
+        scripts: impl IntoIterator<Item = (Arc<str>, ScriptConfig)>,
         global: &GlobalState,
     ) -> EvergardenResult<ScriptManager> {
         Ok(ScriptManager {
             scripts: scripts
                 .into_iter()
-                .map(|cfg| Script::spawn(cfg, global))
+                .map(|(name, cfg)| Script::spawn(name, cfg, global))
                 .collect::<EvergardenResult<Vec<Script>>>()?,
         })
     }
@@ -90,10 +101,21 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn spawn(cfg: ScriptConfig, global: &GlobalState) -> EvergardenResult<Script> {
+    pub fn spawn(
+        name: Arc<str>,
+        cfg: ScriptConfig,
+        global: &GlobalState,
+    ) -> EvergardenResult<Script> {
         let (mut manager, mailbox) = ActorManager::<ScriptInstance>::new(256);
-        for _ in 0..cfg.workers {
-            manager.spawn_actor(ScriptInstance::spawn(&cfg, global)?);
+        for idx in 0..cfg.workers {
+            manager.spawn_actor(ScriptInstance::spawn(
+                ScriptId {
+                    name: Arc::clone(&name),
+                    counter: idx,
+                },
+                &cfg,
+                global,
+            )?);
         }
 
         Ok(Script {
@@ -109,6 +131,7 @@ impl Script {
 }
 
 pub struct ScriptInstance {
+    id: ScriptId,
     client: Mailbox<HttpClient>,
     #[allow(dead_code)]
     proc: Child,
@@ -118,7 +141,15 @@ pub struct ScriptInstance {
 }
 
 impl ScriptInstance {
-    pub fn spawn(script: &ScriptConfig, global: &GlobalState) -> EvergardenResult<ScriptInstance> {
+    #[tracing::instrument(skip(id, script, global), fields(
+        id = %id,
+        script = ?script
+    ))]
+    pub fn spawn(
+        id: ScriptId,
+        script: &ScriptConfig,
+        global: &GlobalState,
+    ) -> EvergardenResult<ScriptInstance> {
         let mut proc = Command::new(&script.command)
             .args(&script.args)
             .stdin(Stdio::piped())
@@ -129,6 +160,7 @@ impl ScriptInstance {
         let proc_out = BufReader::new(proc.stdout.take().unwrap());
 
         Ok(ScriptInstance {
+            id,
             client: global.client.clone(),
             proc,
             proc_in: ClientWriter::new(proc_in),
@@ -144,11 +176,13 @@ impl ScriptInstance {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, data))]
+    #[tracing::instrument(skip(self, data), fields(
+        script = %self.id,
+        url = ?data.meta.url,
+    ))]
     pub async fn submit(&mut self, data: HttpResponse) -> EvergardenResult<()> {
         use ClientRequest::*;
 
-        info!("submitting {} to script", data.meta.url.url.as_str());
         self.proc_in.submit(&data).await?;
 
         loop {
@@ -168,18 +202,18 @@ impl ScriptInstance {
                         continue;
                     }
 
-                    debug!("script yielded url {}", url.url.as_str());
+                    info!(?url, "script yielded url");
 
                     let v = self.client.deferred_request(url).await;
                     tokio::task::spawn(v);
                 }
                 Fetch { url } => {
-                    info!("fetching url {url} for script");
-
                     let Some(url) = data.meta.url.clone().hop(&url) else {
                         self.proc_in.error_fetch("invalid_url").await?;
                         continue;
                     };
+
+                    info!(?url, "fetching url for script");
 
                     match self.client.request(url).await {
                         Ok(res) => self.proc_in.answer_fetch(&res).await?,
