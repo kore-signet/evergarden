@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use actors::Actor;
 use bytes::BytesMut;
-use cacache::{SyncReader, WriteOpts};
+use cacache::{Metadata, SyncReader, WriteOpts};
 use futures_util::{Future, TryFutureExt, TryStreamExt};
 use lz4_flex::frame::{FrameDecoder, FrameEncoder};
 
@@ -13,8 +13,10 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::runtime::Handle;
 use url::Url;
 
-use crate::{surt, EvergardenError, EvergardenResult};
+use crate::{surt, CrawlInfo, EvergardenError, EvergardenResult};
 use crate::{BodyReadError, HttpResponse, ResponseMetadata};
+
+static CRAWL_INFO_KEY: &'static str = "_EVERGARDEN_INTERNAL_CRAWLINFO";
 
 struct SyncBridge<T> {
     inner: T,
@@ -67,6 +69,16 @@ impl Storage {
         }
 
         Ok(Storage { path })
+    }
+
+    pub async fn write_info(&self, info: &CrawlInfo) -> EvergardenResult<()> {
+        cacache::write(&self.path, CRAWL_INFO_KEY, serde_json::to_vec(info)?).await?;
+        Ok(())
+    }
+
+    pub async fn del_by_key(&self, key: &str) -> EvergardenResult<()> {
+        cacache::remove(&self.path, key).await?;
+        Ok(())
     }
 
     pub async fn write_res(&self, res: HttpResponse) -> EvergardenResult<()> {
@@ -164,26 +176,44 @@ impl Storage {
 
     pub fn list(
         &self,
-    ) -> impl Iterator<Item = EvergardenResult<(String, Integrity, ResponseMetadata)>> + '_ {
-        cacache::list_sync(&self.path).map(
-            |res| -> EvergardenResult<(String, Integrity, ResponseMetadata)> {
-                let res = match res {
+    ) -> EvergardenResult<
+        impl Iterator<Item = EvergardenResult<(String, Integrity, ResponseMetadata)>> + '_,
+    > {
+        let crawl_info_hash = cacache::metadata_sync(&self.path, CRAWL_INFO_KEY)?
+            .map(|v| v.integrity)
+            .unwrap_or_else(|| ssri::Integrity::from(CRAWL_INFO_KEY));
+
+        Ok(cacache::list_sync(&self.path).filter_map(
+            move |res| -> Option<EvergardenResult<(String, Integrity, ResponseMetadata)>> {
+                let res: Metadata = match res {
                     Ok(v) => v,
-                    Err(e) => return Err(EvergardenError::Cache(e)),
+                    Err(e) => return Some(Err(EvergardenError::Cache(e))),
                 };
 
-                let headers: ResponseMetadata = serde_json::from_value(res.metadata)?;
+                if res.integrity == crawl_info_hash {
+                    return None;
+                }
 
-                Ok((res.key, res.integrity, headers))
+                let headers: ResponseMetadata = match serde_json::from_value(res.metadata) {
+                    Ok(v) => v,
+                    Err(e) => return Some(Err(EvergardenError::JSON(e))),
+                };
+
+                Some(Ok((res.key, res.integrity, headers)))
             },
-        )
+        ))
+    }
+
+    pub fn read_info_sync(&self) -> EvergardenResult<CrawlInfo> {
+        let bytes = cacache::read_sync(&self.path, CRAWL_INFO_KEY)?;
+        serde_json::from_slice(&bytes).map_err(EvergardenError::JSON)
     }
 
     async fn answer_request(&mut self, i: StorageMessage) -> EvergardenResult<StorageResponse> {
         match i {
             StorageMessage::Retrieve(key) => {
                 self.retrieve_by_url(key)
-                    .map_ok(|v| StorageResponse::Retrieve(v))
+                    .map_ok(StorageResponse::Retrieve)
                     .await
             }
             StorageMessage::Store(res) => {

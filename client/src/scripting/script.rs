@@ -54,7 +54,7 @@ impl ScriptManager {
             .map(|v| v.close_all())
             .collect::<FuturesUnordered<_>>();
 
-        while let Some(_) = stream.next().await {}
+        while (stream.next().await).is_some() {}
     }
 
     pub async fn process(&self, data: HttpResponse) -> EvergardenResult<()> {

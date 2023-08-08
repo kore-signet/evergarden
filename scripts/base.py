@@ -66,7 +66,7 @@ class Scraper:
         self.output.write(struct.pack("<B", 0))
         self.write_str_with_len(url)
     
-    def fetch(self): 
+    def fetch(self, url): 
         self.output.write(struct.pack("<B", 1))
         self.write_str_with_len(url)
         

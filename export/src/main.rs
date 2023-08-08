@@ -1,14 +1,15 @@
 use std::{
     error::Error,
     fs::{create_dir_all, File, OpenOptions},
-    io::{self, BufReader, BufWriter},
+    io::{self, BufReader, BufWriter, Read, Seek, Write},
     path::{Path, PathBuf},
 };
 
 use clap::Parser;
-use evergarden_common::{EvergardenResult, ResponseMetadata, Storage};
+use evergarden_common::{CrawlInfo, EvergardenResult, ResponseMetadata, Storage};
 use evergarden_export::{
     cdxj::CDXWriter,
+    pages::PagesWriter,
     warc::{RotatingWarcRecorder, WarcRecorder},
     DataPackage, DataPackageEntry,
 };
@@ -42,6 +43,37 @@ fn open(path: impl AsRef<Path>) -> io::Result<File> {
         .read(true)
         .write(true)
         .open(path.as_ref())
+}
+
+trait ZipWriterExt {
+    fn add_file(
+        &mut self,
+        path: &str,
+        reader: impl Read,
+        compression: Option<i32>,
+    ) -> io::Result<()>;
+}
+
+impl<W: Write + Seek> ZipWriterExt for ZipWriter<W> {
+    fn add_file(
+        &mut self,
+        path: &str,
+        reader: impl Read,
+        compression: Option<i32>,
+    ) -> io::Result<()> {
+        let opts = if let Some(level) = compression {
+            FileOptions::default()
+                .compression_level(Some(level))
+                .compression_method(CompressionMethod::Deflated)
+        } else {
+            FileOptions::default().compression_method(CompressionMethod::Stored)
+        };
+
+        self.start_file(path, opts)?;
+        std::io::copy(&mut BufReader::new(reader), self)?;
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -81,10 +113,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         open(output_path.join("indexes/index.idx"))?,
     );
 
+    let mut pages_writer = PagesWriter::new(
+        open(output_path.join("pages/pages.jsonl"))?,
+        open(output_path.join("pages/extraPages.jsonl"))?,
+    )?;
+
     // get a list of records from our storage
 
     let mut records = storage
-        .list()
+        .list()?
         .collect::<EvergardenResult<Vec<(String, Integrity, ResponseMetadata)>>>()
         .unwrap();
 
@@ -96,6 +133,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         (lkey, lmeta.fetched_at.to_hms()).cmp(&(rkey, rmeta.fetched_at.to_hms()))
     });
 
+    let CrawlInfo {
+        mut entry_points, ..
+    } = storage.read_info_sync()?;
+    entry_points.sort();
+
     // writes records, batch by batch. ensures resulting CDXJ will be sorted
     for (_, group) in &records
         .into_iter()
@@ -106,11 +148,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         for (key, hash, meta) in group {
             debug!("writing record {key}");
 
+            pages_writer.add_entry(&meta, entry_points.binary_search(&key).is_ok())?;
+
             let cdx =
                 warc_writer.write_warc(&key, &meta, &mut storage.read_body_sync(hash)?.unwrap())?;
             records.push(cdx.clone());
-            // pages_writer.entry(&meta)?;
-            // records.push((key))
         }
 
         cdx_writer.write_batch(records)?;
@@ -129,6 +171,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let ((cdx_file, cdx_entry), (idx_file, idx_entry)) = cdx_writer.finalize("indexes/")?;
     all_entries.push(cdx_entry);
     all_entries.push(idx_entry);
+
+    let ((pages_file, pages_entry), (extrapages_file, extrapages_entry)) =
+        pages_writer.finalize("pages/")?;
+    all_entries.push(pages_entry);
+    all_entries.push(extrapages_entry);
 
     let package_metadata = DataPackage {
         profile: "data-package",
@@ -150,42 +197,31 @@ fn main() -> Result<(), Box<dyn Error>> {
         "indexes",
         FileOptions::default().compression_method(CompressionMethod::Stored),
     )?;
+    package.add_directory(
+        "pages",
+        FileOptions::default().compression_method(CompressionMethod::Deflated),
+    )?;
 
-    package.start_file(
+    package.add_file(
         "datapackage.json",
-        FileOptions::default().compression_level(Some(9)),
-    )?;
-    serde_json::to_writer_pretty(&mut package, &package_metadata)?;
-
-    debug!("copying indexes..");
-    package.start_file(
-        "indexes/index.cdx.gz",
-        FileOptions::default().compression_method(CompressionMethod::Stored),
+        &serde_json::to_vec_pretty(&package_metadata)?[..],
+        Some(9),
     )?;
 
-    std::io::copy(&mut BufReader::new(cdx_file), &mut package)?;
+    info!("copying indexes..");
 
-    package.start_file(
-        "indexes/index.idx",
-        FileOptions::default()
-            .compression_method(CompressionMethod::Deflated)
-            .compression_level(Some(8)),
-    )?;
+    package.add_file("indexes/index.cdx.gz", cdx_file, None)?;
+    package.add_file("indexes/index.idx", idx_file, Some(9))?;
 
-    std::io::copy(&mut BufReader::new(idx_file), &mut package)?;
+    package.add_file("pages/pages.jsonl", pages_file, Some(9))?;
+    package.add_file("pages/extraPages.jsonl", extrapages_file, Some(9))?;
 
-    debug!("copying WARC files");
+    info!("copying WARC files");
 
     for DataPackageEntry { path, .. } in warc_entries {
         debug!("copying WARC: {path}");
-
-        package.start_file(
-            &path,
-            FileOptions::default().compression_method(CompressionMethod::Stored),
-        )?;
         let file = File::open(output_path.join(&path))?;
-
-        std::io::copy(&mut BufReader::new(file), &mut package)?;
+        package.add_file(&path, file, None)?;
     }
 
     info!("finishing WACZ package!");

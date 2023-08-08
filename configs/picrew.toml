@@ -1,0 +1,26 @@
+[general]
+max_hops = 3
+
+[http]
+timeout = "100s"
+headers = [
+    { name = "User-Agent", value = "Mozilla/5.0 (X11; Linux x86_64; rv:92.0) Gecko/20100101 Firefox/92.0" }
+]
+
+[ratelimiter]
+max_tasks_per_worker = 16
+n = 1000
+per = "second"
+jitter = "1ms"
+
+[scripts.scrape_picrew]
+filter = { mime_types = ["text/html"], url_pattern = '''https://picrew.me/en/image_maker/\d+$''' }
+command = "python"
+args = ["scripts/picrew.py"]
+workers = 1
+
+[scripts.links]
+filter = { mime_types = ["text/css"] }
+command = "python"
+args = ["scripts/scrape_links.py"] 
+workers = 1

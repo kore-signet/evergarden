@@ -118,8 +118,8 @@ impl HttpClient {
                 .iter()
                 .map(|HeaderPair { name, value }| {
                     (
-                        HeaderName::from_str(&name).unwrap(),
-                        HeaderValue::from_str(&value).unwrap(),
+                        HeaderName::from_str(name).unwrap(),
+                        HeaderValue::from_str(value).unwrap(),
                     )
                 })
                 .collect::<Vec<_>>(),
@@ -191,15 +191,17 @@ impl HttpClient {
             body: body_rx,
         };
 
-        let (body, storage, scraper) = tokio::join!(
+        let scrapers_handle = self.scrapers.clone();
+        let scraper_res = res.clone();
+        tokio::task::spawn(async move { scrapers_handle.request(scraper_res).await });
+
+        let (body, storage) = tokio::join!(
             body_task,
             self.storage.request(StorageMessage::Store(res.clone())),
-            self.scrapers.request(res.clone())
         );
 
         body.unwrap()?;
         storage?;
-        scraper?;
 
         info!("fetch completed!");
 
@@ -231,16 +233,19 @@ impl Actor for HttpClient {
             loop {
                 tokio::select! {
                     Ok(Message { value, output }) = rx.recv_async() => {
+                        info!("Current HTTP Queue: {}", rx.len());
+
                         if let Ok(StorageResponse::Retrieve(Some(res))) = self.storage.request(StorageMessage::Retrieve(value.url.clone())).await {
-                            let _ = output.send(Ok(res)).unwrap();
+                            output.send(Ok(res)).unwrap();
                             continue;
                         }
 
                         let cli = self.clone();
+
                         let permit = cli.limiter.acquire_owned().await;
                         tokio::task::spawn(async move {
                             let res = cli.get(value).await;
-                            let _ = output.send(res).unwrap();
+                            output.send(res).unwrap();
                             drop(permit);
                         });
                     },

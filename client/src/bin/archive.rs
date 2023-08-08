@@ -7,7 +7,7 @@ use evergarden_client::{
     config::{FullConfig, GlobalState},
     scripting::script::ScriptManager,
 };
-use evergarden_common::{Storage, UrlInfo};
+use evergarden_common::{surt, CrawlInfo, Storage, UrlInfo};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about)]
@@ -33,6 +33,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt::init();
 
     let cfg: FullConfig = toml::from_str(&tokio::fs::read_to_string(args.config).await?)?;
+    let storage: Storage = Storage::new(args.output, !args.no_clobber)?;
+
+    storage
+        .write_info(&CrawlInfo {
+            config: serde_json::to_string(&cfg)?,
+            entry_points: vec![surt(args.start_point.parse().unwrap())],
+        })
+        .await?;
+
+    storage
+        .del_by_key(&surt(args.start_point.parse().unwrap()))
+        .await?;
+
     let FullConfig {
         general,
         ratelimiter,
@@ -40,11 +53,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         scripts,
     } = cfg;
 
-    let storage = Storage::new(args.output, !args.no_clobber)?;
-
     let rate_limiter = HttpRateLimiter::new(ratelimiter);
 
-    let (mut http_manager, http_mailbox) = ActorManager::new(256);
+    let (mut http_manager, http_mailbox) = ActorManager::new(10_000);
     let (mut script_runner, script_mailbox) = ActorManager::new(256);
     let (mut storage_manager, storage_mailbox) = ActorManager::new(256);
 
@@ -62,7 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         client: http_mailbox.clone(),
     };
 
-    script_runner.spawn_actor(ScriptManager::new(scripts.into_iter(), &global_state)?);
+    script_runner.spawn_actor(ScriptManager::new(scripts, &global_state)?);
 
     let mail = http_mailbox.clone();
     tokio::task::spawn(async move {

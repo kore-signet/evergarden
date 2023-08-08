@@ -117,7 +117,7 @@ impl<A: Actor + Send + 'static> ActorManager<A> {
 
     pub async fn close_and_join(&mut self) {
         self.state.send(ProgramState::Closing).unwrap();
-        while let Some(_) = self.tasks.join_next().await {}
+        while (self.tasks.join_next().await).is_some() {}
     }
 }
 

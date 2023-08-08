@@ -179,7 +179,7 @@ pub struct CDXJBlock {
     pub url: String,
     #[serde(serialize_with = "crate::ser_sha256_as_str")]
     pub digest: [u8; 32],
-    pub mime: MediaType,
+    pub mime: Option<MediaType>,
     pub filename: String,
     pub offset: u64,
     pub length: u64,

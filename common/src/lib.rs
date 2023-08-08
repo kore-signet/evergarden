@@ -116,6 +116,7 @@ pub struct ResponseMetadata {
     #[serde(with = "http_serde::header_map")]
     pub headers: HeaderMap<HeaderValue>,
     pub remote_addr: Option<SocketAddr>,
+    #[serde(with = "time::serde::rfc3339")]
     pub fetched_at: OffsetDateTime,
     pub id: Uuid,
 }
@@ -124,4 +125,10 @@ pub struct ResponseMetadata {
 pub struct HttpResponse {
     pub meta: Arc<ResponseMetadata>,
     pub body: async_broadcast::Receiver<BodyResult<Bytes>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CrawlInfo {
+    pub config: String,
+    pub entry_points: Vec<String>,
 }

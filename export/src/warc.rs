@@ -77,8 +77,7 @@ impl WarcRecorder for BufWriter<File> {
                     .get(CONTENT_TYPE)
                     .and_then(|v| v.to_str().ok())
                     .and_then(|v| MediaType::parse(v).ok())
-                    .map(|v| v.without_params())
-                    .unwrap(),
+                    .map(|v| v.without_params()),
                 filename: String::new(),
                 offset: start_position,
                 length: end_position - start_position,

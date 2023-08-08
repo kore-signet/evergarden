@@ -4,6 +4,7 @@ use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 pub mod cdxj;
+pub mod pages;
 pub mod warc;
 pub mod writer;
 
