@@ -1,3 +1,4 @@
+*.wacz
 results.db/
 /target
 /Cargo.lock

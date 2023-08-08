@@ -1,7 +1,7 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(return_position_impl_trait_in_trait)]
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{fmt::Debug, net::SocketAddr, sync::Arc};
 
 use bytes::Bytes;
 
@@ -66,11 +66,21 @@ pub enum BodyReadError {
 pub type EvergardenResult<T> = Result<T, EvergardenError>;
 pub type BodyResult<T> = Result<T, Arc<BodyReadError>>;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct UrlInfo {
     pub url: Url,
     pub discovered_in: Url,
     pub hops: usize,
+}
+
+impl Debug for UrlInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UrlInfo")
+            .field("url", &self.url.as_str())
+            .field("discovered_in", &self.discovered_in.as_str())
+            .field("hops", &self.hops)
+            .finish()
+    }
 }
 
 impl UrlInfo {

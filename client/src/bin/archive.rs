@@ -1,6 +1,8 @@
-use std::{error::Error, sync::atomic::Ordering, time::Duration};
+use std::{error::Error, path::PathBuf, sync::atomic::Ordering, time::Duration};
 
 use actors::ActorManager;
+use clap::builder::TypedValueParser;
+use clap::Parser;
 use evergarden_client::{
     client::{HttpClient, HttpRateLimiter},
     config::{FullConfig, GlobalState},
@@ -8,9 +10,30 @@ use evergarden_client::{
 };
 use evergarden_common::{Storage, UrlInfo};
 
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    #[arg(short, long)]
+    config: PathBuf,
+    #[arg(short, long)]
+    output: PathBuf,
+    #[arg(short, long)]
+    start_point: String,
+    #[arg(long)]
+    no_clobber: bool, // #[arg(
+                      //     long,
+                      //     value_parser = clap::builder::PossibleValuesParser::new(["off", "error", "warn", "info", "debug", "trace"])
+                      //         .map(|s| s.parse::<trac::LevelFilter>().unwrap()),
+                      // )]
+                      // log_level: Option<log::LevelFilter>,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let cfg: FullConfig = toml::from_str(&tokio::fs::read_to_string("config.toml").await?)?;
+    let args = Args::parse();
+    tracing_subscriber::fmt::init();
+
+    let cfg: FullConfig = toml::from_str(&tokio::fs::read_to_string(args.config).await?)?;
     let FullConfig {
         general,
         ratelimiter,
@@ -18,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         scripts,
     } = cfg;
 
-    let storage = Storage::new("results.db", true)?;
+    let storage = Storage::new(args.output, !args.no_clobber)?;
 
     let rate_limiter = HttpRateLimiter::new(ratelimiter);
 
@@ -47,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mail = http_mailbox.clone();
     tokio::task::spawn(async move {
-        mail.request(UrlInfo::start("https://cat-girl.gay").unwrap())
+        mail.request(UrlInfo::start(&args.start_point).unwrap())
             .await
     });
 
@@ -57,7 +80,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         ticker.tick().await;
 
-        if dbg!(actors::TASK_COUNT.load(Ordering::Acquire)) == 0 {
+        if actors::TASK_COUNT.load(Ordering::Acquire) == 0 {
             break;
         }
     }

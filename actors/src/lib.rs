@@ -1,6 +1,7 @@
 #![feature(return_position_impl_trait_in_trait)]
 
 use std::{
+    fmt::Debug,
     future::Future,
     sync::atomic::{AtomicUsize, Ordering},
 };
@@ -122,6 +123,12 @@ impl<A: Actor + Send + 'static> ActorManager<A> {
 
 pub struct Mailbox<A: Actor> {
     tx: flume::Sender<Message<A::Input, A::Output>>,
+}
+
+impl<A: Actor> Debug for Mailbox<A> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mailbox").field("tx", &self.tx).finish()
+    }
 }
 
 impl<A: Actor> Clone for Mailbox<A> {

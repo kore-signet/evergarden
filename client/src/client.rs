@@ -19,6 +19,7 @@ use tokio::{
     sync::{watch, OwnedSemaphorePermit, Semaphore, SemaphorePermit},
     time::timeout,
 };
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::{
@@ -30,7 +31,7 @@ use evergarden_common::*;
 
 type HttpsConn = HttpsConnector<HttpConnector<TrustDnsResolver>>;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HttpRateLimiter {
     total_permits: usize,
     permits: Arc<Semaphore>,
@@ -78,7 +79,7 @@ impl HttpRateLimiter {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct HttpClient {
     headers: Vec<(HeaderName, HeaderValue)>,
     limiter: HttpRateLimiter,
@@ -148,8 +149,9 @@ impl HttpClient {
     //     Ok(IVec::from(out))
     // }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get(&self, url: UrlInfo) -> EvergardenResult<HttpResponse> {
-        println!("fetching {}...", url.url.as_str());
+        info!("fetching {}", url.url.as_str());
 
         let mut request = Request::get(url.url.as_str());
         request
@@ -167,8 +169,13 @@ impl HttpClient {
         {
             Ok(Ok(res)) => res.into_parts(),
             Ok(Err(e)) => return Err(BodyReadError::Client(e).into()),
-            Err(_) => return Err(BodyReadError::TimedOut.into()),
+            Err(_) => {
+                error!("time out!");
+                return Err(BodyReadError::TimedOut.into());
+            }
         };
+
+        info!("reading body");
 
         let (body_tx, body_rx) = async_broadcast::broadcast(1024);
         let body_task = tokio::task::spawn(broadcast_body(self.max_body_length, body, body_tx));
@@ -195,6 +202,8 @@ impl HttpClient {
         body.unwrap()?;
         storage?;
         scraper?;
+
+        info!("fetch completed!");
 
         // self.storage.insert(&res)?;
         // .unwrap();

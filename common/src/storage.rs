@@ -60,6 +60,7 @@ pub struct Storage {
 impl Storage {
     pub fn new(path: impl AsRef<Path>, drop_tables: bool) -> EvergardenResult<Storage> {
         let path = PathBuf::from(path.as_ref());
+        let _ = std::fs::create_dir_all(&path);
 
         if drop_tables {
             cacache::clear_sync(&path)?;

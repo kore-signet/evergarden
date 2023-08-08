@@ -69,7 +69,7 @@ impl WarcRecorder for BufWriter<File> {
         Ok(CDXRecord {
             key: surt.to_owned(),
             time: meta.fetched_at,
-            block: cdxj::CDXBlock {
+            block: cdxj::CDXJBlock {
                 url: meta.url.url.to_string(),
                 digest: block_digest,
                 mime: meta

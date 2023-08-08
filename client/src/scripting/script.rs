@@ -9,6 +9,7 @@ use tokio::{
     io::{BufReader, BufWriter},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
+use tracing::{debug, info};
 
 use crate::{
     client::HttpClient,
@@ -143,26 +144,38 @@ impl ScriptInstance {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, data))]
     pub async fn submit(&mut self, data: HttpResponse) -> EvergardenResult<()> {
         use ClientRequest::*;
 
+        info!("submitting {} to script", data.meta.url.url.as_str());
         self.proc_in.submit(&data).await?;
 
         loop {
             match self.proc_out.read_op().await.unwrap() {
                 Submit { url } => {
                     let Some(url) = data.meta.url.clone().hop(&url) else {
+                        debug!("script result skipped: invalid url {}", &url);
                         continue;
                     };
 
                     if url.hops > self.max_hops {
+                        debug!(
+                            "script result skipped: url {} exceeded max hops",
+                            url.url.as_str()
+                        );
+
                         continue;
                     }
+
+                    debug!("script yielded url {}", url.url.as_str());
 
                     let v = self.client.deferred_request(url).await;
                     tokio::task::spawn(v);
                 }
                 Fetch { url } => {
+                    info!("fetching url {url} for script");
+
                     let Some(url) = data.meta.url.clone().hop(&url) else {
                         self.proc_in.error_fetch("invalid_url").await?;
                         continue;
