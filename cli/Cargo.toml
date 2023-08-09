@@ -1,0 +1,37 @@
+[package]
+name = "evergarden"
+version = "0.1.0"
+edition = "2021"
+authors = ["Kore Signet-Yang <kore@cat-girl.gay>"]
+description = "A scriptable, performant web archiver."
+
+[dependencies]
+actors = { version = "0.1.0", path = "../actors" }
+clap = { version = "4.3.21", features = ["derive"] }
+evergarden-client = { version = "0.1.0", path = "../client" }
+evergarden-common = { version = "0.1.0", path = "../common" }
+tokio = { version = "1.29.1", features = ["full"] }
+tracing-subscriber = "0.3.17"
+tracing = "0.1.37"
+flate2 = { version = "1.0.26" }
+uuid = "1.4.1"
+time = { version = "0.3.25", features = ["formatting", "macros"] }
+http = "0.2.9"
+tempfile = "3.7.1"
+itertools = "0.11.0"
+ssri = "9.2.0"
+neo-mime = { version = "0.1.1", features = ["serde"] }
+serde = { version = "1.0.183", features = ["derive"] }
+serde_json = "1.0.104"
+sha2 = { version = "0.10.7", features = ["asm"] }
+faster-hex = "0.8.0"
+ubyte = "0.10.3"
+zip = { version = "0.6.6", default-features = false, features = ["deflate", "time", "sha1", "hmac", "pbkdf2"] }
+toml = "0.7.6"
+url = "2.4.0"
+indicatif = "0.17.6"
+futures-util = "0.3.28"
+
+[[bin]]
+name = "evergarden"
+path = "src/main.rs"

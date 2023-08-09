@@ -5,36 +5,29 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::Parser;
-use evergarden_common::{CrawlInfo, EvergardenResult, ResponseMetadata, Storage};
-use evergarden_export::{
+use super::{
     cdxj::CDXWriter,
     pages::PagesWriter,
     warc::{RotatingWarcRecorder, WarcRecorder},
     DataPackage, DataPackageEntry,
 };
+use evergarden_common::{CrawlInfo, EvergardenResult, ResponseMetadata, Storage};
+use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use log::{debug, info};
 use ssri::Integrity;
+use tracing_subscriber::filter::LevelFilter;
 
-use clap::builder::TypedValueParser;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use tracing::{debug, info};
 use ubyte::ByteUnit;
 use zip::{write::FileOptions, CompressionMethod, ZipWriter};
 
-#[derive(Parser, Debug)]
-#[command(author, version, about)]
-struct Args {
-    #[arg(short, long)]
+#[derive(clap::Args, Debug)]
+pub(crate) struct ExportArgs {
+    #[arg(short, long, help = "export folder for `evergarden archive`")]
     input: PathBuf,
-    #[arg(short, long)]
+    #[arg(short, long, help = "output .wacz folder")]
     output: PathBuf,
-    #[arg(
-        long,
-        value_parser = clap::builder::PossibleValuesParser::new(["off", "error", "warn", "info", "debug", "trace"])
-            .map(|s| s.parse::<log::LevelFilter>().unwrap()),
-    )]
-    log_level: Option<log::LevelFilter>,
 }
 
 fn open(path: impl AsRef<Path>) -> io::Result<File> {
@@ -76,16 +69,8 @@ impl<W: Write + Seek> ZipWriterExt for ZipWriter<W> {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let args = Args::parse();
-
-    if let Some(level) = args.log_level {
-        pretty_env_logger::formatted_builder()
-            .filter_module(module_path!(), level)
-            .init();
-    } else {
-        pretty_env_logger::init();
-    }
+pub(crate) fn export(args: ExportArgs, log_level: LevelFilter) -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt().with_max_level(log_level).init();
 
     debug!("opening storage");
 
@@ -127,6 +112,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     info!("found {} WARC records!", records.len());
 
+    let bar = ProgressBar::new(records.len() as u64).with_style(
+        ProgressStyle::with_template("{bar:40.cyan/blue} {pos:>7}/{len:7} records written")
+            .unwrap()
+            .progress_chars("##-"),
+    );
     // sort our records by time, key
 
     records.sort_unstable_by(|(lkey, _, lmeta), (rkey, _, rmeta)| {
@@ -146,7 +136,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut records = Vec::with_capacity(8);
 
         for (key, hash, meta) in group {
-            debug!("writing record {key}");
+            bar.inc(1);
+            debug!(key, "writing record");
 
             pages_writer.add_entry(&meta, entry_points.binary_search(&key).is_ok())?;
 
@@ -157,6 +148,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         cdx_writer.write_batch(records)?;
     }
+
+    bar.finish();
 
     // get our metadata in order
 
@@ -219,7 +212,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("copying WARC files");
 
     for DataPackageEntry { path, .. } in warc_entries {
-        debug!("copying WARC: {path}");
+        debug!(?path, "copying WARC");
         let file = File::open(output_path.join(&path))?;
         package.add_file(&path, file, None)?;
     }

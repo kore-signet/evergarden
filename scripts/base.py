@@ -30,9 +30,7 @@ class Scraper:
                 return
             elif opcode == 0:
                 header, body = self.read_response()
-                print("scraping", file=sys.stderr)
                 self.scrape(self, header, body)
-                print("scraped", file=sys.stderr)
 
                 self.end_file()
             else:

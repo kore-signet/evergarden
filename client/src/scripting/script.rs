@@ -9,7 +9,7 @@ use tokio::{
     io::{BufReader, BufWriter},
     process::{Child, ChildStdin, ChildStdout, Command},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, Span};
 
 use crate::{
     client::HttpClient,
@@ -108,14 +108,17 @@ impl Script {
     ) -> EvergardenResult<Script> {
         let (mut manager, mailbox) = ActorManager::<ScriptInstance>::new(256);
         for idx in 0..cfg.workers {
-            manager.spawn_actor(ScriptInstance::spawn(
-                ScriptId {
-                    name: Arc::clone(&name),
-                    counter: idx,
-                },
-                &cfg,
-                global,
-            )?);
+            manager.spawn_actor(
+                ScriptInstance::spawn(
+                    ScriptId {
+                        name: Arc::clone(&name),
+                        counter: idx,
+                    },
+                    &cfg,
+                    global,
+                )?,
+                Span::current(),
+            );
         }
 
         Ok(Script {
@@ -176,9 +179,9 @@ impl ScriptInstance {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self, data), fields(
+    #[tracing::instrument(target = "evergarden::scripting", skip(self, data), fields(
         script = %self.id,
-        url = ?data.meta.url,
+        url = %data.meta.url,
     ))]
     pub async fn submit(&mut self, data: HttpResponse) -> EvergardenResult<()> {
         use ClientRequest::*;
@@ -202,7 +205,7 @@ impl ScriptInstance {
                         continue;
                     }
 
-                    info!(?url, "script yielded url");
+                    info!(%url, "script yielded url");
 
                     let v = self.client.deferred_request(url).await;
                     tokio::task::spawn(v);
@@ -213,7 +216,7 @@ impl ScriptInstance {
                         continue;
                     };
 
-                    info!(?url, "fetching url for script");
+                    info!(%url, "fetching url for script");
 
                     match self.client.request(url).await {
                         Ok(res) => self.proc_in.answer_fetch(&res).await?,

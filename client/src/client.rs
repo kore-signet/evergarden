@@ -19,7 +19,7 @@ use tokio::{
     sync::{watch, OwnedSemaphorePermit, Semaphore, SemaphorePermit},
     time::timeout,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::{
@@ -149,7 +149,7 @@ impl HttpClient {
     //     Ok(IVec::from(out))
     // }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(ret(Display), err, skip(self), target = "evergarden::http", fields(url = %url))]
     pub async fn get(&self, url: UrlInfo) -> EvergardenResult<HttpResponse> {
         let mut request = Request::get(url.url.as_str());
         request
@@ -203,8 +203,6 @@ impl HttpClient {
         body.unwrap()?;
         storage?;
 
-        info!("fetch completed!");
-
         // self.storage.insert(&res)?;
         // .unwrap();
 
@@ -233,8 +231,6 @@ impl Actor for HttpClient {
             loop {
                 tokio::select! {
                     Ok(Message { value, output }) = rx.recv_async() => {
-                        info!("Current HTTP Queue: {}", rx.len());
-
                         if let Ok(StorageResponse::Retrieve(Some(res))) = self.storage.request(StorageMessage::Retrieve(value.url.clone())).await {
                             output.send(Ok(res)).unwrap();
                             continue;

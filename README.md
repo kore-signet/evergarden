@@ -5,6 +5,6 @@ very experimental. don't use in prod, probably
 ### usage
 
 ```bash
-cargo run --bin archive -- --config config.toml --output example-archive --start-point "https://example.com"
-cargo run --bin evergarden-export -- --input example-archive --output example.wacz
+evergarden archive --config configs/html.toml --output example-archive "https://example.com"
+evergarden export -i results.db -o example.wacz
 ```

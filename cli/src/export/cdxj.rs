@@ -10,7 +10,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use time::{format_description::FormatItem, macros::format_description, OffsetDateTime};
 
-use crate::{file_digest, DataPackageEntry};
+use super::{file_digest, DataPackageEntry};
 
 // static FORMATTING =!_descr
 static TIME_FMT: &[FormatItem<'_>] =
@@ -177,7 +177,7 @@ impl<S: Serialize> CDXStyleRecord<S> {
 #[derive(serde::Serialize, Clone)]
 pub struct CDXJBlock {
     pub url: String,
-    #[serde(serialize_with = "crate::ser_sha256_as_str")]
+    #[serde(serialize_with = "super::ser_sha256_as_str")]
     pub digest: [u8; 32],
     pub mime: Option<MediaType>,
     pub filename: String,
@@ -190,7 +190,7 @@ pub struct CDXJBlock {
 pub struct ZipNumBlock {
     pub offset: u64,
     pub length: u64,
-    #[serde(serialize_with = "crate::ser_sha256_as_str")]
+    #[serde(serialize_with = "super::ser_sha256_as_str")]
     pub digest: [u8; 32],
     pub filename: String,
 }

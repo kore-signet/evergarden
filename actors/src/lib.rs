@@ -3,14 +3,18 @@
 use std::{
     fmt::Debug,
     future::Future,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use futures::FutureExt;
 use tokio::{
-    sync::{oneshot, watch},
+    sync::{oneshot, watch, Notify},
     task::JoinSet,
 };
+use tracing::{Instrument, Span};
 
 pub static TASK_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -44,7 +48,7 @@ pub trait Actor: Sized + Send + 'static {
             loop {
                 tokio::select! {
                     Ok(Message { value, output }) = rx.recv_async() => {
-                        let result = self.answer(value).await;
+                        let result = self.answer(value).in_current_span().await;
                         let _ = output.send(result);
                     },
                     _ = program_state.changed() => {
@@ -56,6 +60,7 @@ pub trait Actor: Sized + Send + 'static {
 
             self.close().await;
         }
+        .in_current_span()
     }
 }
 
@@ -97,7 +102,7 @@ pub struct Message<I, O> {
 pub struct ActorManager<A: Actor> {
     tasks: JoinSet<()>,
     state: watch::Sender<ProgramState>,
-    rx: flume::Receiver<Message<A::Input, A::Output>>,
+    pub rx: flume::Receiver<Message<A::Input, A::Output>>,
 }
 
 impl<A: Actor + Send + 'static> ActorManager<A> {
@@ -111,7 +116,10 @@ impl<A: Actor + Send + 'static> ActorManager<A> {
                 rx,
                 state,
             },
-            Mailbox { tx },
+            Mailbox {
+                notify: Arc::new(Notify::const_new()),
+                tx,
+            },
         )
     }
 
@@ -119,10 +127,15 @@ impl<A: Actor + Send + 'static> ActorManager<A> {
         self.state.send(ProgramState::Closing).unwrap();
         while (self.tasks.join_next().await).is_some() {}
     }
+
+    pub fn get_rx(&self) -> flume::Receiver<Message<A::Input, A::Output>> {
+        self.rx.clone()
+    }
 }
 
 pub struct Mailbox<A: Actor> {
     tx: flume::Sender<Message<A::Input, A::Output>>,
+    notify: Arc<Notify>,
 }
 
 impl<A: Actor> Debug for Mailbox<A> {
@@ -134,21 +147,33 @@ impl<A: Actor> Debug for Mailbox<A> {
 impl<A: Actor> Clone for Mailbox<A> {
     fn clone(&self) -> Self {
         Self {
+            notify: Arc::clone(&self.notify),
             tx: self.tx.clone(),
         }
     }
 }
 
 impl<A: Actor + Send + 'static> ActorManager<A> {
-    pub fn spawn_actor(&mut self, actor: A) {
+    pub fn spawn_actor(&mut self, actor: A, span: Span) {
         let rx = self.rx.clone();
 
-        self.tasks
-            .spawn(actor.run_async_loop(rx, self.state.subscribe()));
+        self.tasks.spawn(
+            actor
+                .run_async_loop(rx, self.state.subscribe())
+                .instrument(span),
+        );
     }
 }
 
 impl<A: Actor + 'static> Mailbox<A> {
+    pub fn len(&self) -> usize {
+        self.tx.len()
+    }
+
+    pub fn subscribe(&self) -> Arc<Notify> {
+        Arc::clone(&self.notify)
+    }
+
     pub async fn deferred_request(
         &self,
         input: A::Input,
@@ -156,6 +181,9 @@ impl<A: Actor + 'static> Mailbox<A> {
         TASK_COUNT.fetch_add(1, Ordering::Release);
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
+        let notifier = Arc::clone(&self.notify);
+        notifier.notify_waiters();
+
         let _ = self
             .tx
             .send_async(Message {
@@ -164,8 +192,9 @@ impl<A: Actor + 'static> Mailbox<A> {
             })
             .await;
 
-        oneshot_rx.inspect(|_| {
+        oneshot_rx.inspect(move |_| {
             TASK_COUNT.fetch_sub(1, Ordering::Release);
+            notifier.notify_waiters();
         })
     }
 

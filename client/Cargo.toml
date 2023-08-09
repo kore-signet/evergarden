@@ -27,13 +27,10 @@ futures-util = "0.3.28"
 serde_regex = "1.1.0"
 serde = { version = "1.0.179", features = ["derive", "rc"] }
 serde_json = "1.0.104"
-toml = "0.7.6"
 humantime-serde = "1.1.1"
 
 
 evergarden-common = {path = "../common"}
 actors = { path = "../actors" }
 uuid = { version = "1.4.1", features = ["v4"] }
-clap = { version = "4.3.21", features = ["derive"] }
 tracing = "0.1.37"
-tracing-subscriber = "0.3.17"

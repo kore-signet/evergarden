@@ -1,12 +1,12 @@
+pub(crate) mod cdxj;
+pub(crate) mod pages;
+pub(crate) mod run;
+pub(crate) mod warc;
+
 use std::io::{self, BufReader, Read, Seek, Write};
 
 use serde::{Serialize, Serializer};
 use sha2::{Digest, Sha256};
-
-pub mod cdxj;
-pub mod pages;
-pub mod warc;
-pub mod writer;
 
 #[derive(Serialize)]
 pub struct DataPackage {

@@ -1,7 +1,11 @@
 #![feature(impl_trait_in_assoc_type)]
 #![feature(return_position_impl_trait_in_trait)]
 
-use std::{fmt::Debug, net::SocketAddr, sync::Arc};
+use std::{
+    fmt::{Debug, Display},
+    net::SocketAddr,
+    sync::Arc,
+};
 
 use bytes::Bytes;
 
@@ -83,6 +87,18 @@ impl Debug for UrlInfo {
     }
 }
 
+impl Display for UrlInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} (discovered in {}, hops:{})",
+            self.url.as_str(),
+            self.discovered_in.as_str(),
+            self.hops
+        )
+    }
+}
+
 impl UrlInfo {
     pub fn start(url: &str) -> Option<UrlInfo> {
         let url = Url::parse(url).ok()?;
@@ -125,6 +141,13 @@ pub struct ResponseMetadata {
 pub struct HttpResponse {
     pub meta: Arc<ResponseMetadata>,
     pub body: async_broadcast::Receiver<BodyResult<Bytes>>,
+}
+
+impl Display for HttpResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.meta.status)
+        // write!(f, "{} {}", self.meta.url.url.as_str(), self.meta.status)
+    }
 }
 
 #[derive(Serialize, Deserialize)]

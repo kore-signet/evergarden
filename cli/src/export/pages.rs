@@ -9,7 +9,7 @@ use serde::Serialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{file_digest, DataPackageEntry};
+use super::{file_digest, DataPackageEntry};
 
 #[derive(Serialize)]
 struct PageHeader<'a> {
