@@ -1,6 +1,11 @@
 # evergarden - a scriptable web archiver
 
-very experimental. don't use in prod, probably
+**evergarden is a (very experimental as of now) web archiver that supports simple scripting for crawling through new URLs and exports to neatly packaged up .warc.gz files.**
+
+it's meant to be fast and configurable, but does require a bit of technical knowledge still.
+
+you can find example configurations in [configs/](configs/), and example scripts at [scripts/](scripts/)
+
 
 ### usage
 
