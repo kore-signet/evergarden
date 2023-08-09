@@ -6,5 +6,5 @@ very experimental. don't use in prod, probably
 
 ```bash
 evergarden archive --config configs/html.toml --output example-archive "https://example.com"
-evergarden export -i results.db -o example.wacz
+evergarden export -i example-archive -o example.wacz
 ```
